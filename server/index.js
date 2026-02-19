@@ -106,6 +106,24 @@ function removePlayerFromLobby(code, playerId) {
   const lobby = lobbies.get(code);
   if (!lobby) return;
   
+  const playerIndex = lobby.players.findIndex(p => p.id === playerId);
+  
+  // If game is in progress, convert player to AI instead of removing
+  if (lobby.gameStarted && playerIndex !== -1) {
+    const player = lobby.players[playerIndex];
+    console.log(`Game in progress: Converting ${player.name} to AI instead of removing`);
+    
+    // Convert the player to an AI player
+    player.isAI = true;
+    player.id = `ai-${Date.now()}-${playerIndex}`;
+    player.name = `AI Player ${playerIndex + 1}`;
+    player.socketId = null;
+    
+    // Don't remove from players array - keep them in game
+    return lobby;
+  }
+  
+  // If game hasn't started, remove the player
   lobby.players = lobby.players.filter(p => p.id !== playerId);
   
   // If host left, assign new host or delete lobby
@@ -310,6 +328,11 @@ io.on('connection', (socket) => {
     if (lobby) {
       io.to(code).emit('lobby-updated', lobby);
       io.to(code).emit('player-left', { playerId: socket.id });
+      
+      const playerIndex = lobby.players.findIndex(p => p.id === socket.id || (p.isAI && p.isAI));
+      if (playerIndex !== -1) {
+        console.log(`Player ${socket.id} converted to AI in lobby ${code}`);
+      }
     }
     
     console.log(`Player ${socket.id} left lobby ${code}`);
@@ -325,6 +348,11 @@ io.on('connection', (socket) => {
       if (remainingLobby) {
         io.to(code).emit('lobby-updated', remainingLobby);
         io.to(code).emit('player-left', { playerId: socket.id });
+        
+        const playerIndex = remainingLobby.players.findIndex(p => p.id === socket.id || (p.isAI && p.id.includes('ai-')));
+        if (playerIndex !== -1) {
+          console.log(`Player ${socket.id} converted to AI in lobby ${code}`);
+        }
       }
     });
   });

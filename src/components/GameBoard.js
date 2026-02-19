@@ -55,13 +55,25 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
       if (isLocal && !mySocketId) {
         console.error(`ERROR: Player ${player.name} (${player.id}) is identified as local but socket ID is ${mySocketId}`);
       }
-      types.push({
-        isLocalHuman: isLocal,
-        isRemoteHuman: !isLocal,
-        isAI: false,
-        name: isLocal ? 'You' : player.name,
-        socketId: player.id
-      });
+      
+      // Check if this player has been converted to AI (disconnected)
+      if (player.isAI) {
+        types.push({
+          isLocalHuman: false,
+          isRemoteHuman: false,
+          isAI: true,
+          name: player.name,
+          socketId: player.id
+        });
+      } else {
+        types.push({
+          isLocalHuman: isLocal,
+          isRemoteHuman: !isLocal,
+          isAI: false,
+          name: isLocal ? 'You' : player.name,
+          socketId: player.id
+        });
+      }
     });
     
     // Add AI players from lobby
@@ -618,9 +630,46 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     socketService.onGameAction(handleGameAction);
 
     return () => {
-      socketService.offGameAction(handleGameAction);
+      try {
+        socketService.offGameAction(handleGameAction);
+      } catch (error) {
+        console.warn('Error removing game-action listener:', error);
+      }
     };
   }, [isMultiplayer, lobby, playerTypes]);
+
+  // Handle player leaving during game
+  useEffect(() => {
+    if (!isMultiplayer || !lobby) return;
+
+    const handlePlayerLeft = ({ playerId }) => {
+      console.log(`Player ${playerId} left the game`);
+      
+      // Find which player index left
+      const leftPlayerIndex = lobby.players.findIndex(p => p.id === playerId);
+      if (leftPlayerIndex === -1) return;
+
+      // Update player to AI and update the game message
+      setPlayers(prevPlayers => {
+        const newPlayers = [...prevPlayers];
+        const leftPlayer = lobby.players[leftPlayerIndex];
+        
+        setGameMessage(`${leftPlayer.name} disconnected! An AI has taken over their hand.`);
+        
+        return newPlayers; // The server already converted them to AI, we just update UI
+      });
+    };
+
+    socketService.onPlayerLeft(handlePlayerLeft);
+
+    return () => {
+      try {
+        socketService.offPlayerLeft(handlePlayerLeft);
+      } catch (error) {
+        console.warn('Error removing player-left listener:', error);
+      }
+    };
+  }, [isMultiplayer, lobby]);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>

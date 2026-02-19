@@ -116,10 +116,18 @@ function App() {
         setGameMode('multiplayerGame');
       };
 
+      const handleLobbyUpdated = (updatedLobby) => {
+        console.log('=== Lobby Updated ===');
+        console.log('Updated lobby:', updatedLobby);
+        setCurrentLobby(updatedLobby);
+      };
+
       socketService.onGameStarted(handleGameStarted);
+      socketService.onLobbyUpdated(handleLobbyUpdated);
 
       return () => {
         socketService.offGameStarted(handleGameStarted);
+        socketService.offLobbyUpdated(handleLobbyUpdated);
       };
     }
   }, [gameMode, currentLobby]);
@@ -134,12 +142,29 @@ function App() {
       console.log('humanPlayer index:', Math.max(0, currentLobby.players.findIndex(p => p.id === socketService.getSocketId())));
       console.log('Players:');
       currentLobby.players.forEach((p, idx) => {
-        console.log(`  [${idx}] name="${p.name}", id="${p.id}"`);
+        console.log(`  [${idx}] name="${p.name}", id="${p.id}", isAI="${p.isAI || false}"`);
       });
       console.log('AI players:');
       currentLobby.aiPlayers.forEach((ai, idx) => {
         console.log(`  [${currentLobby.players.length + idx}] name="${ai.name}"`);
       });
+
+      // Listen for lobby updates during game (for player disconnects/AI takeover)
+      const handleLobbyUpdated = (updatedLobby) => {
+        console.log('=== Lobby Updated During Game ===');
+        console.log('Updated lobby:', updatedLobby);
+        console.log('Players:');
+        updatedLobby.players.forEach((p, idx) => {
+          console.log(`  [${idx}] name="${p.name}", id="${p.id}", isAI="${p.isAI || false}"`);
+        });
+        setCurrentLobby(updatedLobby);
+      };
+
+      socketService.onLobbyUpdated(handleLobbyUpdated);
+
+      return () => {
+        socketService.offLobbyUpdated(handleLobbyUpdated);
+      };
     }
   }, [gameMode, currentLobby]);
 

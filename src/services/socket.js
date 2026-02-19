@@ -77,70 +77,70 @@ class SocketService {
   }
 
   leaveLobby(code) {
-    this.socket.emit('leave-lobby', { code });
+    if (this.socket) this.socket.emit('leave-lobby', { code });
   }
 
   addAI(code) {
-    this.socket.emit('add-ai', { code });
+    if (this.socket) this.socket.emit('add-ai', { code });
   }
 
   removeAI(code, aiId) {
-    this.socket.emit('remove-ai', { code, aiId });
+    if (this.socket) this.socket.emit('remove-ai', { code, aiId });
   }
 
   toggleReady(code) {
-    this.socket.emit('toggle-ready', { code });
+    if (this.socket) this.socket.emit('toggle-ready', { code });
   }
 
   startGame(code) {
-    this.socket.emit('start-game', { code });
+    if (this.socket) this.socket.emit('start-game', { code });
   }
 
   // Game events
   sendGameAction(code, action, data) {
-    this.socket.emit('game-action', { code, action, data });
+    if (this.socket) this.socket.emit('game-action', { code, action, data });
   }
 
   // Event listeners
   onLobbyUpdated(callback) {
-    this.socket.on('lobby-updated', callback);
+    if (this.socket) this.socket.on('lobby-updated', callback);
   }
 
   onPlayerLeft(callback) {
-    this.socket.on('player-left', callback);
+    if (this.socket) this.socket.on('player-left', callback);
   }
 
   onGameStarted(callback) {
-    this.socket.on('game-started', callback);
+    if (this.socket) this.socket.on('game-started', callback);
   }
 
   onGameAction(callback) {
-    this.socket.on('game-action', callback);
+    if (this.socket) this.socket.on('game-action', callback);
   }
 
   onError(callback) {
-    this.socket.on('error', callback);
+    if (this.socket) this.socket.on('error', callback);
   }
 
   // Remove listeners
   offLobbyUpdated(callback) {
-    this.socket.off('lobby-updated', callback);
+    if (this.socket) this.socket.off('lobby-updated', callback);
   }
 
   offPlayerLeft(callback) {
-    this.socket.off('player-left', callback);
+    if (this.socket) this.socket.off('player-left', callback);
   }
 
   offGameStarted(callback) {
-    this.socket.off('game-started', callback);
+    if (this.socket) this.socket.off('game-started', callback);
   }
 
   offGameAction(callback) {
-    this.socket.off('game-action', callback);
+    if (this.socket) this.socket.off('game-action', callback);
   }
 
   offError(callback) {
-    this.socket.off('error', callback);
+    if (this.socket) this.socket.off('error', callback);
   }
 
   getSocketId() {
