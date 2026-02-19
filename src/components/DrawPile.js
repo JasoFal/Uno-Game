@@ -1,6 +1,8 @@
 import React from 'react';
 
 const DrawPile = ({ onDraw, cardsRemaining }) => {
+  const isDisabled = !onDraw;
+  
   const cardBackStyle = {
     width: '80px',
     height: '120px',
@@ -13,9 +15,10 @@ const DrawPile = ({ onDraw, cardsRemaining }) => {
     fontSize: '24px',
     fontWeight: 'bold',
     color: '#fff',
-    cursor: 'pointer',
+    cursor: isDisabled ? 'not-allowed' : 'pointer',
     margin: '20px auto',
-    transition: 'transform 0.2s'
+    transition: 'transform 0.2s',
+    opacity: isDisabled ? 0.5 : 1
   };
 
   return (
@@ -24,8 +27,8 @@ const DrawPile = ({ onDraw, cardsRemaining }) => {
       <p>{cardsRemaining} cards remaining</p>
       <div
         style={cardBackStyle}
-        onClick={onDraw}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+        onClick={isDisabled ? null : onDraw}
+        onMouseEnter={(e) => !isDisabled && (e.currentTarget.style.transform = 'scale(1.05)')}
         onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
       >
         UNO
