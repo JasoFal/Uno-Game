@@ -21,6 +21,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
   const [showUnoButton, setShowUnoButton] = useState(false);
   const [unoTargetPlayer, setUnoTargetPlayer] = useState(null);
   const [unoCalled, setUnoCalled] = useState({});
+  const [unoMode, setUnoMode] = useState(null); // 'call' for player to call UNO, 'catch' for others to catch
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameOver, setGameOver] = useState(false);
 
@@ -95,6 +96,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     setUnoCalled({});
     setShowUnoButton(false);
     setUnoTargetPlayer(null);
+    setUnoMode(null);
     setGameOver(false);
   }, [numberOfPlayers, humanPlayer]);
 
@@ -154,7 +156,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     }
     
     nextTurn();
-  }, [deck.length, drawCard, currentPlayer, humanPlayer, nextTurn, playerTypes, isMultiplayer, lobby]);
+  }, [deck.length, drawCard, currentPlayer, nextTurn, playerTypes, isMultiplayer, lobby]);
 
   const playCard = useCallback((card, chosenColor = null) => {
     const newPlayers = [...players];
@@ -241,21 +243,25 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
         setGameMessage(`${playerName} played ${card.value || card.type}`);
         nextTurn();
     }
-  }, [players, currentPlayer, discardPile, humanPlayer, unoCalled, gameDirection, numberOfPlayers, drawCard, nextTurn, playerTypes, isMultiplayer, lobby]);
+  }, [players, currentPlayer, discardPile, unoCalled, gameDirection, numberOfPlayers, drawCard, nextTurn, playerTypes, isMultiplayer, lobby]);
 
-  const handleUnoClick = useCallback((clickingPlayer) => {
-    if (unoTargetPlayer === null) return;
+  const handleUnoClick = useCallback((clickingPlayer, action) => {
+    if (unoTargetPlayer === null || unoTargetPlayer === undefined) {
+      console.warn('Invalid targetPlayer for UNO click:', unoTargetPlayer);
+      return;
+    }
+    const types = playerTypes();
 
-    if (clickingPlayer === unoTargetPlayer) {
-      // Target player clicked - they're safe!
+    if (action === 'call' && clickingPlayer === unoTargetPlayer) {
+      // Target player called UNO successfully
       setUnoCalled({ ...unoCalled, [clickingPlayer]: true });
-      const types = playerTypes();
       const playerName = types[clickingPlayer]?.name || 'Player';
       setGameMessage(`${playerName} called UNO!`);
       setShowUnoButton(false);
       setUnoTargetPlayer(null);
-    } else {
-      // Another player clicked first - target draws 2 cards
+      setUnoMode(null);
+    } else if (action === 'catch' && clickingPlayer !== unoTargetPlayer) {
+      // Another player caught the target for not calling UNO
       if (deck.length >= 2) {
         drawCard(unoTargetPlayer, 2);
         const types = playerTypes();
@@ -265,27 +271,28 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
       }
       setShowUnoButton(false);
       setUnoTargetPlayer(null);
+      setUnoMode(null);
     }
-  }, [unoTargetPlayer, unoCalled, humanPlayer, deck.length, drawCard, playerTypes]);
+  }, [unoTargetPlayer, unoCalled, deck.length, drawCard, playerTypes]);
 
   const checkForUnoSituation = useCallback(() => {
     // Check if any player has exactly 1 card and hasn't called UNO
     players.forEach((hand, index) => {
-      if (hand.length === 1 && !unoCalled[index] && !showUnoButton) {
+      if (hand.length === 1 && !unoCalled[index]) {
         const types = playerTypes();
-        // Only AI players automatically call UNO, not remote human players
-        if (types[index]?.isAI && !types[index]?.isLocalHuman) {
-          const aiUnoDelay = 500 + Math.random() * 1000; // 0.5-1.5 seconds
-          setTimeout(() => {
-            handleUnoClick(index);
-          }, aiUnoDelay);
+        const playerWithOneCard = types[index];
+
+        // Show UNO popup for any player with 1 card
+        if (playerWithOneCard) {
+          setUnoTargetPlayer(index);
+          setUnoMode('call');
+          setShowUnoButton(true);
         }
-        
-        setShowUnoButton(true);
-        setUnoTargetPlayer(index);
       }
     });
-  }, [players, unoCalled, showUnoButton, humanPlayer, handleUnoClick, playerTypes]);
+  }, [players, unoCalled, playerTypes]);
+
+
 
   const handleAiTurn = useCallback(() => {
     const topCard = discardPile[discardPile.length - 1];
@@ -381,6 +388,61 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
       setIsAiTurn(false);
     }
   }, [currentPlayer, humanPlayer, gameOver, showColorPicker, showUnoButton, handleAiTurn, playerTypes]);
+
+  // AI UNO response handler (for calling and catching)
+  useEffect(() => {
+    if (!showUnoButton || unoMode === null || unoTargetPlayer === null) return;
+
+    const types = playerTypes();
+    const targetPlayer = types[unoTargetPlayer];
+    const timers = [];
+
+    if (unoMode === 'call') {
+      // If target is AI, auto-call UNO after a delay
+      if (targetPlayer?.isAI) {
+        const aiUnoDelay = 500 + Math.random() * 1000;
+        const timer = setTimeout(() => {
+          handleUnoClick(unoTargetPlayer, 'call');
+        }, aiUnoDelay);
+        timers.push(timer);
+      }
+
+      // After 3 seconds, if UNO wasn't called, transition to catch phase
+      const catchPhaseTimer = setTimeout(() => {
+        setUnoMode(prevMode => {
+          // Check if player already called UNO
+          if (unoCalled[unoTargetPlayer]) {
+            return prevMode;
+          }
+          // Transition to catch phase
+          return 'catch';
+        });
+      }, 3000);
+      timers.push(catchPhaseTimer);
+    } else if (unoMode === 'catch') {
+      // Other AI players try to catch the target
+      const aiPlayers = [];
+      types.forEach((type, index) => {
+        if (type?.isAI && index !== unoTargetPlayer) {
+          aiPlayers.push(index);
+        }
+      });
+
+      if (aiPlayers.length > 0) {
+        // First AI player to respond catches them
+        const catcherIndex = aiPlayers[Math.floor(Math.random() * aiPlayers.length)];
+        const aiCatchDelay = 800 + Math.random() * 1200; // Give humans more time
+        const timer = setTimeout(() => {
+          handleUnoClick(catcherIndex, 'catch');
+        }, aiCatchDelay);
+        timers.push(timer);
+      }
+    }
+
+    return () => {
+      timers.forEach(timer => clearTimeout(timer));
+    };
+  }, [showUnoButton, unoMode, unoTargetPlayer, unoCalled, handleUnoClick, playerTypes]);
 
   // Multiplayer game action listener
   useEffect(() => {
@@ -510,11 +572,13 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
 
       {showColorPicker && <ColorPicker onColorSelect={handleColorSelect} />}
       
-      {showUnoButton && (
+      {showUnoButton && unoTargetPlayer !== null && unoTargetPlayer !== undefined && unoMode && (
         <UnoButton 
           onUnoClick={handleUnoClick}
           targetPlayer={unoTargetPlayer}
           numberOfPlayers={numberOfPlayers}
+          unoMode={unoMode}
+          playerTypes={playerTypes()}
         />
       )}
     </div>

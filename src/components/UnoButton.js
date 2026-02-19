@@ -1,6 +1,14 @@
 import React from 'react';
 
-const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers }) => {
+const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers, unoMode = 'call', playerTypes = [] }) => {
+  // Safeguard: ensure we have valid data
+  if (typeof unoMode !== 'string' || unoMode === null) {
+    return null;
+  }
+
+  // Get the name of the target player safely
+  const targetPlayerName = playerTypes[targetPlayer]?.name || `Player ${targetPlayer + 1}`;
+
   const overlayStyle = {
     position: 'fixed',
     top: 0,
@@ -12,7 +20,8 @@ const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers }) => {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
-    animation: 'fadeIn 0.3s ease-in'
+    animation: 'fadeIn 0.3s ease-in',
+    pointerEvents: 'auto'
   };
 
   const modalStyle = {
@@ -21,7 +30,10 @@ const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers }) => {
     borderRadius: '20px',
     textAlign: 'center',
     boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
-    animation: 'scaleIn 0.3s ease-out'
+    animation: 'scaleIn 0.3s ease-out',
+    pointerEvents: 'auto',
+    position: 'relative',
+    zIndex: 1001
   };
 
   const buttonContainerStyle = {
@@ -41,7 +53,10 @@ const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers }) => {
     borderRadius: '10px',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    boxShadow: '0 3px 10px rgba(0, 0, 0, 0.2)'
+    boxShadow: '0 3px 10px rgba(0, 0, 0, 0.2)',
+    pointerEvents: 'auto',
+    position: 'relative',
+    zIndex: 1001
   });
 
   return (
@@ -79,37 +94,74 @@ const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers }) => {
           marginBottom: '10px',
           color: '#333'
         }}>
-          Player {targetPlayer + 1} has 1 card left!
+          {unoMode === 'call' 
+            ? `${targetPlayerName} has 1 card left!`
+            : `${targetPlayerName} forgot to call UNO!`
+          }
         </p>
         <p style={{ 
           fontSize: '16px', 
           color: '#666',
           marginBottom: '20px'
         }}>
-          Click your player button quickly!
+          {unoMode === 'call'
+            ? 'Tap your character to call UNO!'
+            : 'Tap your character to catch them!'
+          }
         </p>
         
         <div style={buttonContainerStyle}>
-          {Array.from({ length: numberOfPlayers }, (_, index) => (
-            <button
-              key={index}
-              style={playerButtonStyle(index)}
-              onClick={() => onUnoClick(index)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.05)';
-                e.currentTarget.style.boxShadow = '0 5px 20px rgba(0, 0, 0, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.2)';
-              }}
-            >
-              {index === targetPlayer 
-                ? `I'm Player ${index + 1} - UNO!` 
-                : `I'm Player ${index + 1} - Catch them!`
-              }
-            </button>
-          ))}
+          {Array.from({ length: numberOfPlayers }, (_, index) => {
+            const isTarget = index === targetPlayer;
+            const isLocalPlayer = playerTypes[index]?.isLocalHuman;
+            const playerName = playerTypes[index]?.name || `Player ${index + 1}`;
+            
+            // In 'call' mode, only show target player's button
+            if (unoMode === 'call') {
+              if (!isTarget) return null;
+              return (
+                <button
+                  key={index}
+                  style={playerButtonStyle(index)}
+                  onClick={() => onUnoClick(index, 'call')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 5px 20px rgba(0, 0, 0, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.2)';
+                  }}
+                >
+                  {isLocalPlayer ? 'I Called UNO! 🎉' : `${playerName} - UNO!`}
+                </button>
+              );
+            }
+            
+            // In 'catch' mode, show all players except target
+            if (unoMode === 'catch') {
+              if (isTarget) return null;
+              return (
+                <button
+                  key={index}
+                  style={playerButtonStyle(index)}
+                  onClick={() => onUnoClick(index, 'catch')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 5px 20px rgba(0, 0, 0, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 3px 10px rgba(0, 0, 0, 0.2)';
+                  }}
+                >
+                  {isLocalPlayer ? 'Catch Them! 🚨' : `${playerName} - Catch!`}
+                </button>
+              );
+            }
+            
+            return null;
+          })}
         </div>
       </div>
     </div>

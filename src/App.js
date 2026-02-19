@@ -9,7 +9,6 @@ import './App.css';
 function App() {
   const [gameMode, setGameMode] = useState('menu'); // 'menu', 'quickplay', 'lobby', 'lobbyRoom', 'multiplayerGame'
   const [currentLobby, setCurrentLobby] = useState(null);
-  const [connectionError, setConnectionError] = useState(false);
 
   useEffect(() => {
     // Cleanup on unmount
@@ -28,10 +27,8 @@ function App() {
     try {
       await socketService.connect();
       setGameMode('lobby');
-      setConnectionError(false);
     } catch (error) {
       console.error('Failed to connect to server:', error);
-      setConnectionError(true);
       alert('Failed to connect to server. Please make sure the server is running on port 3001.');
     }
   };
