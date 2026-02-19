@@ -3,6 +3,7 @@ import PlayerHand from './PlayerHand';
 import DiscardPile from './DiscardPile';
 import DrawPile from './DrawPile';
 import ColorPicker from './ColorPicker';
+import UnoButton from './UnoButton';  // Add this import
 import { createDeck, canPlayCard, CARD_TYPES } from '../utils/deck';
 
 const GameBoard = () => {
@@ -11,16 +12,24 @@ const GameBoard = () => {
   const [players, setPlayers] = useState([]);
   const [currentPlayer, setCurrentPlayer] = useState(0);
   const [currentColor, setCurrentColor] = useState(null);
-  const [gameDirection, setGameDirection] = useState(1); // 1 for clockwise, -1 for counter-clockwise
+  const [gameDirection, setGameDirection] = useState(1);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [pendingCard, setPendingCard] = useState(null);
   const [gameMessage, setGameMessage] = useState('');
+  const [showUnoButton, setShowUnoButton] = useState(false);  // Add this
+  const [unoTargetPlayer, setUnoTargetPlayer] = useState(null);  // Add this
+  const [unoCalled, setUnoCalled] = useState({});  // Track who has called UNO
   const numberOfPlayers = 2;
 
   // Initialize game
   useEffect(() => {
     startNewGame();
   }, []);
+
+  // Check for UNO situation after players state changes
+  useEffect(() => {
+    checkForUnoSituation();
+  }, [players]);
 
   const startNewGame = () => {
     const newDeck = createDeck();
@@ -47,17 +56,57 @@ const GameBoard = () => {
     setCurrentPlayer(0);
     setGameDirection(1);
     setGameMessage('Game started! Player 1\'s turn');
+    setUnoCalled({});  // Reset UNO calls
+    setShowUnoButton(false);
+    setUnoTargetPlayer(null);
+  };
+
+  const checkForUnoSituation = () => {
+    // Check if any player has exactly 1 card and hasn't called UNO
+    players.forEach((hand, index) => {
+      if (hand.length === 1 && !unoCalled[index]) {
+        setShowUnoButton(true);
+        setUnoTargetPlayer(index);
+      }
+    });
+  };
+
+  const handleUnoClick = (clickingPlayer) => {
+    if (unoTargetPlayer === null) return;
+
+    if (clickingPlayer === unoTargetPlayer) {
+      // Target player clicked - they're safe!
+      setUnoCalled({ ...unoCalled, [clickingPlayer]: true });
+      setGameMessage(`Player ${clickingPlayer + 1} called UNO!`);
+      setShowUnoButton(false);
+      setUnoTargetPlayer(null);
+    } else {
+      // Another player clicked first - target draws 2 cards
+      if (deck.length >= 2) {
+        drawCard(unoTargetPlayer, 2);
+        setGameMessage(`Player ${clickingPlayer + 1} caught Player ${unoTargetPlayer + 1}! Player ${unoTargetPlayer + 1} draws 2 cards!`);
+      }
+      setShowUnoButton(false);
+      setUnoTargetPlayer(null);
+    }
   };
 
   const drawCard = (playerIndex, count = 1) => {
     const newDeck = [...deck];
     const newPlayers = [...players];
-    const drawnCards = newDeck.splice(0, count);
+    const drawnCards = newDeck.splice(0, Math.min(count, newDeck.length));
     
     newPlayers[playerIndex] = [...newPlayers[playerIndex], ...drawnCards];
     
     setDeck(newDeck);
     setPlayers(newPlayers);
+    
+    // If player draws cards, they no longer have UNO
+    if (unoCalled[playerIndex]) {
+      const newUnoCalled = { ...unoCalled };
+      delete newUnoCalled[playerIndex];
+      setUnoCalled(newUnoCalled);
+    }
     
     return drawnCards;
   };
@@ -124,7 +173,15 @@ const GameBoard = () => {
     // Check for winner
     if (playerHand.length === 0) {
       setGameMessage(`Player ${currentPlayer + 1} wins!`);
+      setShowUnoButton(false);
       return;
+    }
+
+    // If player now has more than 1 card, remove their UNO status
+    if (playerHand.length > 1 && unoCalled[currentPlayer]) {
+      const newUnoCalled = { ...unoCalled };
+      delete newUnoCalled[currentPlayer];
+      setUnoCalled(newUnoCalled);
     }
 
     // Handle card effects
@@ -242,6 +299,14 @@ const GameBoard = () => {
       ))}
 
       {showColorPicker && <ColorPicker onColorSelect={handleColorSelect} />}
+      
+      {showUnoButton && (
+        <UnoButton 
+          onUnoClick={handleUnoClick}
+          targetPlayer={unoTargetPlayer}
+          numberOfPlayers={numberOfPlayers}
+        />
+      )}
     </div>
   );
 };
