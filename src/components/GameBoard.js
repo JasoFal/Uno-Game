@@ -42,13 +42,24 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     const types = [];
     const mySocketId = socketService.getSocketId();
     
+    // Validate that we have a valid socket ID
+    if (!mySocketId) {
+      console.error('ERROR: Socket ID is not available! playerTypes() cannot identify local player');
+      console.log('Current socket ID:', mySocketId);
+      console.log('Lobby players:', lobby.players.map(p => ({ id: p.id, name: p.name })));
+    }
+    
     // Add human players from lobby
     lobby.players.forEach((player, index) => {
+      const isLocal = player.id === mySocketId;
+      if (isLocal && !mySocketId) {
+        console.error(`ERROR: Player ${player.name} (${player.id}) is identified as local but socket ID is ${mySocketId}`);
+      }
       types.push({
-        isLocalHuman: player.id === mySocketId,
-        isRemoteHuman: player.id !== mySocketId,
+        isLocalHuman: isLocal,
+        isRemoteHuman: !isLocal,
         isAI: false,
-        name: player.id === mySocketId ? 'You' : player.name,
+        name: isLocal ? 'You' : player.name,
         socketId: player.id
       });
     });
@@ -69,6 +80,16 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
 
   // Function definitions (in dependency order)
   const startNewGame = useCallback(() => {
+    if (isMultiplayer && lobby) {
+      const expectedPlayers = lobby.players.length + lobby.aiPlayers.length;
+      if (numberOfPlayers !== expectedPlayers) {
+        console.error(`ERROR: numberOfPlayers mismatch!`);
+        console.error(`  numberOfPlayers prop: ${numberOfPlayers}`);
+        console.error(`  Expected from lobby: ${expectedPlayers}`);
+        console.error(`  Lobby players: ${lobby.players.length}, Lobby AI: ${lobby.aiPlayers.length}`);
+      }
+    }
+    
     const newDeck = createDeck();
     const newPlayers = [];
     
@@ -98,7 +119,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     setUnoTargetPlayer(null);
     setUnoMode(null);
     setGameOver(false);
-  }, [numberOfPlayers, humanPlayer]);
+  }, [numberOfPlayers, humanPlayer, isMultiplayer, lobby]);
 
   const drawCard = useCallback((playerIndex, count = 1) => {
     const newDeck = [...deck];
@@ -174,12 +195,30 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     setDiscardPile(newDiscardPile);
     setPlayers(newPlayers);
 
+    // Calculate next player BEFORE any state changes
+    let nextPlayer = (currentPlayer + gameDirection + numberOfPlayers) % numberOfPlayers;
+    let skipped = false;
+    
+    // Check for Skip card effects
+    if (card.type === CARD_TYPES.SKIP) {
+      nextPlayer = (nextPlayer + gameDirection + numberOfPlayers) % numberOfPlayers;
+      skipped = true;
+    } else if (card.type === CARD_TYPES.DRAW_TWO || card.type === CARD_TYPES.WILD_DRAW_FOUR) {
+      // Next player will be skipped after drawing in the local nextTurn call
+      nextPlayer = (nextPlayer + gameDirection + numberOfPlayers) % numberOfPlayers;
+      skipped = true;
+    }
+
     // Broadcast play action in multiplayer
     if (isMultiplayer && lobby) {
       socketService.sendGameAction(lobby.code, 'play-card', { 
         card, 
         chosenColor,
-        playerIndex: currentPlayer 
+        playerIndex: currentPlayer,
+        cardType: card.type,
+        nextPlayer: nextPlayer,
+        skipped: skipped,
+        direction: gameDirection
       });
     }
 
@@ -215,6 +254,9 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
       case CARD_TYPES.REVERSE:
         setGameDirection(-gameDirection);
         setGameMessage(`${playerName} played Reverse!`);
+        if (isMultiplayer && lobby) {
+          socketService.sendGameAction(lobby.code, 'direction-change', { direction: -gameDirection });
+        }
         nextTurn();
         break;
       
@@ -362,6 +404,32 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     startNewGame();
   }, [startNewGame]);
 
+  // Validate multiplayer sync - only after game is initialized
+  useEffect(() => {
+    if (isMultiplayer && lobby && players.length > 0) {
+      const expectedPlayers = lobby.players.length + lobby.aiPlayers.length;
+      const actualPlayers = players.length;
+      
+      if (numberOfPlayers !== expectedPlayers || actualPlayers !== numberOfPlayers) {
+        console.error(`WARNING: Player count mismatch!`);
+        console.error(`  numberOfPlayers prop: ${numberOfPlayers}`);
+        console.error(`  Expected from lobby: ${expectedPlayers}`);
+        console.error(`  Actual player hands: ${actualPlayers}`);
+        console.error(`  currentPlayer index: ${currentPlayer}`);
+        console.error(`  Lobby human players:`);
+        lobby.players.forEach((p, idx) => {
+          console.error(`    [${idx}] name="${p.name}", id="${p.id}", isHost=${p.isHost}`);
+        });
+        console.error(`  Lobby AI players:`);
+        lobby.aiPlayers.forEach((ai, idx) => {
+          console.error(`    [${lobby.players.length + idx}] name="${ai.name}"`);
+        });
+      } else {
+        console.log(`✓ Multiplayer sync OK: ${actualPlayers} players initialized`);
+      }
+    }
+  }, [isMultiplayer, lobby, players.length, numberOfPlayers, currentPlayer]);
+
   // Check for UNO situation after players state changes
   useEffect(() => {
     if (!gameOver) {
@@ -454,9 +522,97 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
 
       console.log('Received game action:', action, data);
 
-      // Handle different action types
-      // Note: Actions are already executed by the player who made them
-      // This is just for logging or additional sync if needed
+      // Apply remote player actions to our game state
+      switch(action) {
+        case 'play-card': {
+          const { card, chosenColor, playerIndex, nextPlayer, skipped, direction } = data;
+          console.log(`Player ${playerIndex} played ${card.value || card.type}, next player: ${nextPlayer}`);
+          
+          // Update player's hand - remove the card
+          setPlayers(prevPlayers => {
+            const newPlayers = [...prevPlayers];
+            const hand = newPlayers[playerIndex];
+            const cardIndex = hand.findIndex(c => c.id === card.id);
+            if (cardIndex !== -1) {
+              hand.splice(cardIndex, 1);
+            }
+            return newPlayers;
+          });
+          
+          // Add to discard pile
+          setDiscardPile(prevPile => [...prevPile, card]);
+          
+          // Update current color if changed
+          const newColor = chosenColor || card.color;
+          if (newColor !== 'wild') {
+            setCurrentColor(newColor);
+          }
+          
+          // Update game direction if it was a reverse
+          if (direction !== undefined) {
+            setGameDirection(direction);
+          }
+          
+          // Move to next player
+          if (nextPlayer !== undefined) {
+            setCurrentPlayer(nextPlayer);
+            const types = playerTypes();
+            const nextName = types[nextPlayer]?.isLocalHuman ? 'Your turn!' : `${types[nextPlayer]?.name}'s turn`;
+            const skipText = skipped ? ' (skipped)' : '';
+            setGameMessage(nextName + skipText);
+          }
+          
+          // Check if player won
+          setPlayers(prevPlayers => {
+            if (prevPlayers[playerIndex].length === 0) {
+              const types = playerTypes();
+              const winnerName = types[playerIndex]?.name || 'Player';
+              setGameMessage(`${winnerName} wins! 🏆`);
+              setGameOver(true);
+            }
+            return prevPlayers;
+          });
+          
+          break;
+        }
+
+        case 'draw-card': {
+          const { playerIndex } = data;
+          console.log(`Player ${playerIndex} drew a card`);
+          
+          // We don't know what card was drawn, so just increment their card count
+          setPlayers(prevPlayers => {
+            const newPlayers = [...prevPlayers];
+            // Note: In a real implementation, we'd draw from deck and remove from it
+            // For now, we simulate by adding a placeholder
+            newPlayers[playerIndex] = [...newPlayers[playerIndex], { id: Math.random(), color: 'unknown', type: 'drawn' }];
+            return newPlayers;
+          });
+          
+          break;
+        }
+
+        case 'next-turn': {
+          const { nextPlayerIndex, skipped } = data;
+          console.log(`Next turn - Player ${nextPlayerIndex}'s turn (skipped: ${skipped})`);
+          setCurrentPlayer(nextPlayerIndex);
+          
+          const types = playerTypes();
+          const nextName = types[nextPlayerIndex]?.isLocalHuman ? 'Your turn!' : `${types[nextPlayerIndex]?.name}'s turn`;
+          setGameMessage(nextName);
+          
+          break;
+        }
+
+        case 'direction-change': {
+          console.log('Game direction reversed');
+          setGameDirection(prevDir => -prevDir);
+          break;
+        }
+
+        default:
+          console.log('Unknown action:', action);
+      }
     };
 
     socketService.onGameAction(handleGameAction);
@@ -464,7 +620,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMulti
     return () => {
       socketService.offGameAction(handleGameAction);
     };
-  }, [isMultiplayer, lobby]);
+  }, [isMultiplayer, lobby, playerTypes]);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>

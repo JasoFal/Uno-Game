@@ -13,6 +13,16 @@ const LobbyRoom = ({ lobby: initialLobby, onStartGame, onLeaveLobby }) => {
 
   useEffect(() => {
     const handleLobbyUpdate = (updatedLobby) => {
+      console.log('=== Received lobby-updated ===');
+      console.log('Updated lobby:', updatedLobby);
+      console.log('Players:');
+      updatedLobby.players.forEach((p, idx) => {
+        console.log(`  [${idx}] name="${p.name}", id="${p.id}", host=${p.isHost}`);
+      });
+      console.log('AI players:');
+      updatedLobby.aiPlayers.forEach((ai, idx) => {
+        console.log(`  [${updatedLobby.players.length + idx}] name="${ai.name}"`);
+      });
       setLobby(updatedLobby);
     };
 

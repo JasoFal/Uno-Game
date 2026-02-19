@@ -132,8 +132,15 @@ io.on('connection', (socket) => {
   socket.on('create-lobby', ({ playerName, password }) => {
     const lobby = createLobby(socket.id, playerName, password);
     socket.join(lobby.code);
+    
+    console.log(`=== Lobby Created ===`);
+    console.log(`Code: ${lobby.code}, Host: ${playerName}, Socket ID: ${socket.id}`);
+    console.log(`Lobby players:`);
+    lobby.players.forEach((p, idx) => {
+      console.log(`  [${idx}] ${p.name} (id: ${p.id}, host: ${p.isHost})`);
+    });
+    
     socket.emit('lobby-created', lobby);
-    console.log(`Lobby ${lobby.code} created by ${playerName}`);
   });
 
   // Join lobby
@@ -156,11 +163,22 @@ io.on('connection', (socket) => {
       socket.emit('join-error', { error: result.error });
       return;
     }
-    
+
     socket.join(code);
-    socket.emit('lobby-joined', lobby);
-    io.to(code).emit('lobby-updated', lobby);
-    console.log(`${playerName} joined lobby ${code}`);
+    const updatedLobby = lobbies.get(code);
+    
+    console.log(`=== Player Joined ===`);
+    console.log(`Name: ${playerName}, Socket ID: ${socket.id}`);
+    console.log(`Lobby ${code} now has:`);
+    updatedLobby.players.forEach((p, idx) => {
+      console.log(`  [${idx}] ${p.name} (id: ${p.id}, host: ${p.isHost})`);
+    });
+    updatedLobby.aiPlayers.forEach((ai, idx) => {
+      console.log(`  [${updatedLobby.players.length + idx}] ${ai.name}`);
+    });
+    
+    socket.emit('lobby-joined', updatedLobby);
+    io.to(code).emit('lobby-updated', updatedLobby);
   });
 
   // Add AI player
@@ -259,8 +277,20 @@ io.on('connection', (socket) => {
     }
     
     lobby.gameStarted = true;
-    io.to(code).emit('game-started', lobby);
+    
+    // Log detailed player information for debugging
     console.log(`Game started in lobby ${code}`);
+    console.log(`Total players: ${lobby.players.length + lobby.aiPlayers.length}`);
+    console.log('Human players:');
+    lobby.players.forEach((p, idx) => {
+      console.log(`  [${idx}] ${p.name} (id: ${p.id}, host: ${p.isHost})`);
+    });
+    console.log('AI players:');
+    lobby.aiPlayers.forEach((ai, idx) => {
+      console.log(`  [${lobby.players.length + idx}] ${ai.name}`);
+    });
+    
+    io.to(code).emit('game-started', lobby);
   });
 
   // Game actions

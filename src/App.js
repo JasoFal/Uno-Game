@@ -36,6 +36,17 @@ function App() {
   const handleCreateLobby = async (playerName, password) => {
     try {
       const lobby = await socketService.createLobby(playerName, password);
+      console.log('=== LOBBY CREATED ===');
+      console.log('Received lobby:', lobby);
+      console.log('My socket ID:', socketService.getSocketId());
+      console.log('Players in lobby:');
+      lobby.players.forEach((p, idx) => {
+        console.log(`  [${idx}] ${p.name} (id: ${p.id}, host: ${p.isHost})`);
+      });
+      console.log('AI players:');
+      lobby.aiPlayers.forEach((ai, idx) => {
+        console.log(`  [${lobby.players.length + idx}] ${ai.name}`);
+      });
       setCurrentLobby(lobby);
       setGameMode('lobbyRoom');
     } catch (error) {
@@ -47,6 +58,17 @@ function App() {
   const handleJoinLobby = async (code, playerName, password) => {
     try {
       const lobby = await socketService.joinLobby(code, playerName, password);
+      console.log('=== LOBBY JOINED ===');
+      console.log('Received lobby:', lobby);
+      console.log('My socket ID:', socketService.getSocketId());
+      console.log('Players in lobby:');
+      lobby.players.forEach((p, idx) => {
+        console.log(`  [${idx}] ${p.name} (id: ${p.id}, host: ${p.isHost})`);
+      });
+      console.log('AI players:');
+      lobby.aiPlayers.forEach((ai, idx) => {
+        console.log(`  [${lobby.players.length + idx}] ${ai.name}`);
+      });
       setCurrentLobby(lobby);
       setGameMode('lobbyRoom');
     } catch (error) {
@@ -78,7 +100,18 @@ function App() {
   useEffect(() => {
     if (gameMode === 'lobbyRoom' && currentLobby) {
       const handleGameStarted = (lobby) => {
-        console.log('Game started!', lobby);
+        console.log('=== GAME STARTED ===');
+        console.log('Received lobby:', lobby);
+        console.log('My socket ID:', socketService.getSocketId());
+        console.log('Players in lobby:');
+        lobby.players.forEach((p, idx) => {
+          console.log(`  [${idx}] ${p.name} (id: ${p.id}, host: ${p.isHost})`);
+        });
+        console.log('AI players:');
+        lobby.aiPlayers.forEach((ai, idx) => {
+          console.log(`  [${lobby.players.length + idx}] ${ai.name}`);
+        });
+        
         setCurrentLobby(lobby);
         setGameMode('multiplayerGame');
       };
@@ -88,6 +121,25 @@ function App() {
       return () => {
         socketService.offGameStarted(handleGameStarted);
       };
+    }
+  }, [gameMode, currentLobby]);
+
+  // Log when rendering multiplayer game
+  useEffect(() => {
+    if (gameMode === 'multiplayerGame' && currentLobby) {
+      console.log('=== Rendering Multiplayer GameBoard ===');
+      console.log('currentLobby:', currentLobby);
+      console.log('numberOfPlayers:', currentLobby.players.length + currentLobby.aiPlayers.length);
+      console.log('My socket ID:', socketService.getSocketId());
+      console.log('humanPlayer index:', Math.max(0, currentLobby.players.findIndex(p => p.id === socketService.getSocketId())));
+      console.log('Players:');
+      currentLobby.players.forEach((p, idx) => {
+        console.log(`  [${idx}] name="${p.name}", id="${p.id}"`);
+      });
+      console.log('AI players:');
+      currentLobby.aiPlayers.forEach((ai, idx) => {
+        console.log(`  [${currentLobby.players.length + idx}] name="${ai.name}"`);
+      });
     }
   }, [gameMode, currentLobby]);
 
@@ -124,7 +176,7 @@ function App() {
       {gameMode === 'multiplayerGame' && currentLobby && (
         <GameBoard 
           numberOfPlayers={currentLobby.players.length + currentLobby.aiPlayers.length}
-          humanPlayer={currentLobby.players.findIndex(p => p.id === socketService.getSocketId())}
+          humanPlayer={Math.max(0, currentLobby.players.findIndex(p => p.id === socketService.getSocketId()))}
           onBackToMenu={handleBackToMenu}
           isMultiplayer={true}
           lobby={currentLobby}
