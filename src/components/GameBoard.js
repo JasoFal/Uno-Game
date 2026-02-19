@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import PlayerHand from './PlayerHand';
 import DiscardPile from './DiscardPile';
 import DrawPile from './DrawPile';
@@ -23,35 +23,8 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameOver, setGameOver] = useState(false);
 
-  // Initialize game
-  useEffect(() => {
-    startNewGame();
-  }, []);
-
-  // Check for UNO situation after players state changes
-  useEffect(() => {
-    if (!gameOver) {
-      checkForUnoSituation();
-    }
-  }, [players, gameOver]);
-
-  // AI turn handler
-  useEffect(() => {
-    if (currentPlayer !== humanPlayer && !gameOver && !showColorPicker && !showUnoButton) {
-      setIsAiTurn(true);
-      const delay = getAiDelay();
-      
-      const aiTimer = setTimeout(() => {
-        handleAiTurn();
-      }, delay);
-
-      return () => clearTimeout(aiTimer);
-    } else {
-      setIsAiTurn(false);
-    }
-  }, [currentPlayer, humanPlayer, gameOver, showColorPicker, showUnoButton]);
-
-  const startNewGame = () => {
+  // Function definitions (in dependency order)
+  const startNewGame = useCallback(() => {
     const newDeck = createDeck();
     const newPlayers = [];
     
@@ -80,79 +53,9 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     setShowUnoButton(false);
     setUnoTargetPlayer(null);
     setGameOver(false);
-  };
+  }, [numberOfPlayers, humanPlayer]);
 
-  const checkForUnoSituation = () => {
-    // Check if any player has exactly 1 card and hasn't called UNO
-    players.forEach((hand, index) => {
-      if (hand.length === 1 && !unoCalled[index] && !showUnoButton) {
-        // AI players automatically call UNO after a short delay
-        if (index !== humanPlayer) {
-          const aiUnoDelay = 500 + Math.random() * 1000; // 0.5-1.5 seconds
-          setTimeout(() => {
-            handleUnoClick(index);
-          }, aiUnoDelay);
-        }
-        
-        setShowUnoButton(true);
-        setUnoTargetPlayer(index);
-      }
-    });
-  };
-
-  const handleUnoClick = (clickingPlayer) => {
-    if (unoTargetPlayer === null) return;
-
-    if (clickingPlayer === unoTargetPlayer) {
-      // Target player clicked - they're safe!
-      setUnoCalled({ ...unoCalled, [clickingPlayer]: true });
-      const playerName = clickingPlayer === humanPlayer ? 'You' : `AI Player ${clickingPlayer + 1}`;
-      setGameMessage(`${playerName} called UNO!`);
-      setShowUnoButton(false);
-      setUnoTargetPlayer(null);
-    } else {
-      // Another player clicked first - target draws 2 cards
-      if (deck.length >= 2) {
-        drawCard(unoTargetPlayer, 2);
-        const catcher = clickingPlayer === humanPlayer ? 'You' : `AI Player ${clickingPlayer + 1}`;
-        const caught = unoTargetPlayer === humanPlayer ? 'you' : `AI Player ${unoTargetPlayer + 1}`;
-        setGameMessage(`${catcher} caught ${caught}! ${caught === 'you' ? 'You draw' : 'They draw'} 2 cards!`);
-      }
-      setShowUnoButton(false);
-      setUnoTargetPlayer(null);
-    }
-  };
-
-  const handleAiTurn = () => {
-    const topCard = discardPile[discardPile.length - 1];
-    const aiHand = players[currentPlayer];
-    
-    // AI selects best card to play
-    const selectedCard = aiSelectCard(
-      aiHand,
-      topCard,
-      currentColor,
-      players,
-      currentPlayer,
-      gameDirection
-    );
-
-    if (!selectedCard) {
-      // AI needs to draw
-      handleDrawCard();
-      return;
-    }
-
-    // Handle wild cards
-    if (selectedCard.type === CARD_TYPES.WILD || selectedCard.type === CARD_TYPES.WILD_DRAW_FOUR) {
-      const chosenColor = aiSelectWildColor(aiHand);
-      playCard(selectedCard, chosenColor);
-    } else {
-      playCard(selectedCard);
-    }
-  };
-
-  const drawCard = (playerIndex, count = 1) => {
+  const drawCard = useCallback((playerIndex, count = 1) => {
     const newDeck = [...deck];
     const newPlayers = [...players];
     const drawnCards = newDeck.splice(0, Math.min(count, newDeck.length));
@@ -170,21 +73,9 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     }
     
     return drawnCards;
-  };
+  }, [deck, players, unoCalled]);
 
-  const handleDrawCard = () => {
-    if (deck.length === 0) {
-      setGameMessage('No more cards to draw!');
-      return;
-    }
-
-    drawCard(currentPlayer, 1);
-    const playerName = currentPlayer === humanPlayer ? 'You' : `AI Player ${currentPlayer + 1}`;
-    setGameMessage(`${playerName} drew a card`);
-    nextTurn();
-  };
-
-  const nextTurn = (skip = false) => {
+  const nextTurn = useCallback((skip = false) => {
     const nextPlayer = (currentPlayer + gameDirection + numberOfPlayers) % numberOfPlayers;
     
     if (skip) {
@@ -200,27 +91,21 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
       const nextName = nextPlayer === humanPlayer ? 'Your turn!' : `AI Player ${nextPlayer + 1}'s turn`;
       setGameMessage(nextName);
     }
-  };
+  }, [currentPlayer, gameDirection, numberOfPlayers, humanPlayer]);
 
-  const handleCardPlay = (card) => {
-    const topCard = discardPile[discardPile.length - 1];
-    
-    if (!canPlayCard(card, topCard, currentColor)) {
-      setGameMessage('Cannot play that card!');
+  const handleDrawCard = useCallback(() => {
+    if (deck.length === 0) {
+      setGameMessage('No more cards to draw!');
       return;
     }
 
-    // Handle wild cards
-    if (card.type === CARD_TYPES.WILD || card.type === CARD_TYPES.WILD_DRAW_FOUR) {
-      setPendingCard(card);
-      setShowColorPicker(true);
-      return;
-    }
+    drawCard(currentPlayer, 1);
+    const playerName = currentPlayer === humanPlayer ? 'You' : `AI Player ${currentPlayer + 1}`;
+    setGameMessage(`${playerName} drew a card`);
+    nextTurn();
+  }, [deck.length, drawCard, currentPlayer, humanPlayer, nextTurn]);
 
-    playCard(card);
-  };
-
-  const playCard = (card, chosenColor = null) => {
+  const playCard = useCallback((card, chosenColor = null) => {
     const newPlayers = [...players];
     const playerHand = newPlayers[currentPlayer];
     const cardIndex = playerHand.findIndex(c => c.id === card.id);
@@ -294,22 +179,139 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
         setGameMessage(`${playerName} played ${card.value || card.type}`);
         nextTurn();
     }
-  };
+  }, [players, currentPlayer, discardPile, humanPlayer, unoCalled, gameDirection, numberOfPlayers, drawCard, nextTurn]);
 
-  const handleColorSelect = (color) => {
+  const handleUnoClick = useCallback((clickingPlayer) => {
+    if (unoTargetPlayer === null) return;
+
+    if (clickingPlayer === unoTargetPlayer) {
+      // Target player clicked - they're safe!
+      setUnoCalled({ ...unoCalled, [clickingPlayer]: true });
+      const playerName = clickingPlayer === humanPlayer ? 'You' : `AI Player ${clickingPlayer + 1}`;
+      setGameMessage(`${playerName} called UNO!`);
+      setShowUnoButton(false);
+      setUnoTargetPlayer(null);
+    } else {
+      // Another player clicked first - target draws 2 cards
+      if (deck.length >= 2) {
+        drawCard(unoTargetPlayer, 2);
+        const catcher = clickingPlayer === humanPlayer ? 'You' : `AI Player ${clickingPlayer + 1}`;
+        const caught = unoTargetPlayer === humanPlayer ? 'you' : `AI Player ${unoTargetPlayer + 1}`;
+        setGameMessage(`${catcher} caught ${caught}! ${caught === 'you' ? 'You draw' : 'They draw'} 2 cards!`);
+      }
+      setShowUnoButton(false);
+      setUnoTargetPlayer(null);
+    }
+  }, [unoTargetPlayer, unoCalled, humanPlayer, deck.length, drawCard]);
+
+  const checkForUnoSituation = useCallback(() => {
+    // Check if any player has exactly 1 card and hasn't called UNO
+    players.forEach((hand, index) => {
+      if (hand.length === 1 && !unoCalled[index] && !showUnoButton) {
+        // AI players automatically call UNO after a short delay
+        if (index !== humanPlayer) {
+          const aiUnoDelay = 500 + Math.random() * 1000; // 0.5-1.5 seconds
+          setTimeout(() => {
+            handleUnoClick(index);
+          }, aiUnoDelay);
+        }
+        
+        setShowUnoButton(true);
+        setUnoTargetPlayer(index);
+      }
+    });
+  }, [players, unoCalled, showUnoButton, humanPlayer, handleUnoClick]);
+
+  const handleAiTurn = useCallback(() => {
+    const topCard = discardPile[discardPile.length - 1];
+    const aiHand = players[currentPlayer];
+    
+    // AI selects best card to play
+    const selectedCard = aiSelectCard(
+      aiHand,
+      topCard,
+      currentColor,
+      players,
+      currentPlayer,
+      gameDirection
+    );
+
+    if (!selectedCard) {
+      // AI needs to draw
+      handleDrawCard();
+      return;
+    }
+
+    // Handle wild cards
+    if (selectedCard.type === CARD_TYPES.WILD || selectedCard.type === CARD_TYPES.WILD_DRAW_FOUR) {
+      const chosenColor = aiSelectWildColor(aiHand);
+      playCard(selectedCard, chosenColor);
+    } else {
+      playCard(selectedCard);
+    }
+  }, [discardPile, players, currentPlayer, currentColor, gameDirection, handleDrawCard, playCard]);
+
+  const handleCardPlay = useCallback((card) => {
+    const topCard = discardPile[discardPile.length - 1];
+    
+    if (!canPlayCard(card, topCard, currentColor)) {
+      setGameMessage('Cannot play that card!');
+      return;
+    }
+
+    // Handle wild cards
+    if (card.type === CARD_TYPES.WILD || card.type === CARD_TYPES.WILD_DRAW_FOUR) {
+      setPendingCard(card);
+      setShowColorPicker(true);
+      return;
+    }
+
+    playCard(card);
+  }, [discardPile, currentColor, playCard]);
+
+  const handleColorSelect = useCallback((color) => {
     setShowColorPicker(false);
     playCard(pendingCard, color);
     setPendingCard(null);
-  };
+  }, [pendingCard, playCard]);
 
-  const getPlayableCards = () => {
+  const getPlayableCards = useCallback(() => {
     const topCard = discardPile[discardPile.length - 1];
     const currentHand = players[currentPlayer] || [];
     
     return currentHand
       .filter(card => canPlayCard(card, topCard, currentColor))
       .map(card => card.id);
-  };
+  }, [discardPile, players, currentPlayer, currentColor]);
+
+  // Effects
+  // Initialize game
+  useEffect(() => {
+    startNewGame();
+  }, [startNewGame]);
+
+  // Check for UNO situation after players state changes
+  useEffect(() => {
+    if (!gameOver) {
+      checkForUnoSituation();
+    }
+  }, [gameOver, checkForUnoSituation]);
+
+  // AI turn handler
+  useEffect(() => {
+    if (currentPlayer !== humanPlayer && !gameOver && !showColorPicker && !showUnoButton) {
+      setIsAiTurn(true);
+      const delay = getAiDelay();
+      
+      const aiTimer = setTimeout(() => {
+        handleAiTurn();
+      }, delay);
+
+      return () => clearTimeout(aiTimer);
+    } else {
+      setIsAiTurn(false);
+    }
+  }, [currentPlayer, humanPlayer, gameOver, showColorPicker, showUnoButton, handleAiTurn]);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
