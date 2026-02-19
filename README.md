@@ -1,70 +1,133 @@
-# Getting Started with Create React App
+# UNO Game
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Play Uno with or without your friends!
+### A Fidgetech project
 
-## Available Scripts
+## 🎮 Features
+- **Quick Play**: Play against 3 AI opponents locally
+- **Multiplayer Lobby System**:
+  - Create password-protected lobbies
+  - Join lobbies with a 6-character code
+  - Max 4 players per lobby
+  - Add/remove AI players dynamically
+  - Host controls to start the game
 
-In the project directory, you can run:
+## 🚀 Installation & Setup
 
-### `npm start`
+### 1. Install Dependencies
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+#### Frontend (React)
+```bash
+npm install
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+#### Backend (Server)
+```bash
+cd server
+npm install
+cd ..
+```
 
-### `npm test`
+### 2. Run the Application
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+You need to run both the frontend and backend servers:
 
-### `npm run build`
+#### Terminal 1 - Backend Server
+```bash
+cd server
+npm start
+```
+The server will run on `http://localhost:3001`
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+#### Terminal 2 - Frontend React App
+```bash
+npm start
+```
+The app will run on `http://localhost:3000`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 🎯 How to Play Multiplayer
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Creating a Lobby
+1. Click **"Lobby"** from the main menu
+2. Click **"Create Lobby"**
+3. Enter your name
+4. (Optional) Enable password protection
+5. Share the 6-character lobby code with friends
 
-### `npm run eject`
+### Joining a Lobby
+1. Click **"Lobby"** from the main menu
+2. Click **"Join Lobby"**
+3. Enter your name
+4. Enter the lobby code
+5. Enter password if required
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Lobby Controls (Host)
+- **Add AI Player**: Add computer opponents to fill empty slots
+- **Remove AI**: Remove AI players before starting
+- **Start Game**: Begin the game when all players are ready
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Lobby Controls (Players)
+- **Ready/Not Ready**: Toggle your ready status
+- **Leave Lobby**: Exit the lobby
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## 🛠️ Technologies Used
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Frontend
+- React 19
+- Socket.IO Client
+- CSS-in-JS styling
 
-## Learn More
+### Backend
+- Node.js
+- Express
+- Socket.IO Server
+- CORS
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 🔧 Configuration
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Server Port
+The server runs on port `3001` by default. To change:
 
-### Code Splitting
+Edit `server/index.js`:
+```javascript
+const PORT = process.env.PORT || YOUR_PORT;
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Edit `src/services/socket.js`:
+```javascript
+const SOCKET_URL = 'http://localhost:YOUR_PORT';
+```
 
-### Analyzing the Bundle Size
+### Environment Variables
+Create a `.env` file in the root directory:
+```
+REACT_APP_SOCKET_URL=http://localhost:3001
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## 🐛 Troubleshooting
 
-### Making a Progressive Web App
+### "Failed to connect to server"
+- Make sure the backend server is running on port 3001
+- Check if another application is using port 3001
+- Verify firewall settings
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### "Lobby not found"
+- Lobby codes expire when empty
+- Verify you're entering the correct 6-character code
+- Case-insensitive code entry
 
-### Advanced Configuration
+### Game state issues
+- Refresh the page if players appear stuck
+- Check browser console for errors
+- Ensure all players are on the same game version
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## 🎲 Game Rules
 
-### Deployment
+Standard UNO rules apply:
+- Match cards by color or number
+- Action cards: Skip, Reverse, Draw Two
+- Wild cards change the color
+- Wild Draw Four forces next player to draw 4 cards
+- First player to empty their hand wins!
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Enjoy playing UNO with your friends! 🎴
