@@ -6,8 +6,9 @@ import ColorPicker from './ColorPicker';
 import UnoButton from './UnoButton';
 import { createDeck, canPlayCard, CARD_TYPES } from '../utils/deck';
 import { aiSelectCard, aiSelectWildColor, getAiDelay } from '../utils/ai';
+import socketService from '../services/socket';
 
-const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
+const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu, isMultiplayer = false, lobby = null }) => {
   const [deck, setDeck] = useState([]);
   const [discardPile, setDiscardPile] = useState([]);
   const [players, setPlayers] = useState([]);
@@ -22,6 +23,48 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
   const [unoCalled, setUnoCalled] = useState({});
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+
+  // Multiplayer player mapping
+  const playerTypes = useCallback(() => {
+    if (!isMultiplayer || !lobby) {
+      // Single player mode: only humanPlayer is human, rest are AI
+      return Array(numberOfPlayers).fill(null).map((_, i) => ({
+        isLocalHuman: i === humanPlayer,
+        isRemoteHuman: false,
+        isAI: i !== humanPlayer,
+        name: i === humanPlayer ? 'You' : `AI Player ${i + 1}`,
+        socketId: null
+      }));
+    }
+
+    // Multiplayer mode: map lobby players
+    const types = [];
+    const mySocketId = socketService.getSocketId();
+    
+    // Add human players from lobby
+    lobby.players.forEach((player, index) => {
+      types.push({
+        isLocalHuman: player.id === mySocketId,
+        isRemoteHuman: player.id !== mySocketId,
+        isAI: false,
+        name: player.id === mySocketId ? 'You' : player.name,
+        socketId: player.id
+      });
+    });
+    
+    // Add AI players from lobby
+    lobby.aiPlayers.forEach((ai, index) => {
+      types.push({
+        isLocalHuman: false,
+        isRemoteHuman: false,
+        isAI: true,
+        name: ai.name,
+        socketId: null
+      });
+    });
+    
+    return types;
+  }, [isMultiplayer, lobby, numberOfPlayers, humanPlayer]);
 
   // Function definitions (in dependency order)
   const startNewGame = useCallback(() => {
@@ -88,10 +131,11 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
       setGameMessage(`${skippedName} skipped! ${nextName} turn`);
     } else {
       setCurrentPlayer(nextPlayer);
-      const nextName = nextPlayer === humanPlayer ? 'Your turn!' : `AI Player ${nextPlayer + 1}'s turn`;
+      const types = playerTypes();
+      const nextName = types[nextPlayer]?.isLocalHuman ? 'Your turn!' : `${types[nextPlayer]?.name}'s turn`;
       setGameMessage(nextName);
     }
-  }, [currentPlayer, gameDirection, numberOfPlayers, humanPlayer]);
+  }, [currentPlayer, gameDirection, numberOfPlayers, humanPlayer, playerTypes]);
 
   const handleDrawCard = useCallback(() => {
     if (deck.length === 0) {
@@ -100,10 +144,17 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     }
 
     drawCard(currentPlayer, 1);
-    const playerName = currentPlayer === humanPlayer ? 'You' : `AI Player ${currentPlayer + 1}`;
+    const types = playerTypes();
+    const playerName = types[currentPlayer]?.name || 'Player';
     setGameMessage(`${playerName} drew a card`);
+    
+    // Broadcast draw action in multiplayer
+    if (isMultiplayer && lobby) {
+      socketService.sendGameAction(lobby.code, 'draw-card', { playerIndex: currentPlayer });
+    }
+    
     nextTurn();
-  }, [deck.length, drawCard, currentPlayer, humanPlayer, nextTurn]);
+  }, [deck.length, drawCard, currentPlayer, humanPlayer, nextTurn, playerTypes, isMultiplayer, lobby]);
 
   const playCard = useCallback((card, chosenColor = null) => {
     const newPlayers = [...players];
@@ -121,9 +172,19 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     setDiscardPile(newDiscardPile);
     setPlayers(newPlayers);
 
+    // Broadcast play action in multiplayer
+    if (isMultiplayer && lobby) {
+      socketService.sendGameAction(lobby.code, 'play-card', { 
+        card, 
+        chosenColor,
+        playerIndex: currentPlayer 
+      });
+    }
+
     // Check for winner
     if (playerHand.length === 0) {
-      const winnerName = currentPlayer === humanPlayer ? 'You win!' : `AI Player ${currentPlayer + 1} wins!`;
+      const types = playerTypes();
+      const winnerName = types[currentPlayer]?.isLocalHuman ? 'You win! 🎉' : `${types[currentPlayer]?.name} wins! 🏆`;
       setGameMessage(winnerName);
       setGameOver(true);
       return;
@@ -140,7 +201,8 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     const newColor = chosenColor || card.color;
     setCurrentColor(newColor);
 
-    const playerName = currentPlayer === humanPlayer ? 'You' : `AI Player ${currentPlayer + 1}`;
+    const types = playerTypes();
+    const playerName = types[currentPlayer]?.name || 'Player';
 
     switch (card.type) {
       case CARD_TYPES.SKIP:
@@ -157,8 +219,8 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
       case CARD_TYPES.DRAW_TWO:
         const nextPlayerIdx = (currentPlayer + gameDirection + numberOfPlayers) % numberOfPlayers;
         drawCard(nextPlayerIdx, 2);
-        const targetName = nextPlayerIdx === humanPlayer ? 'You' : `AI Player ${nextPlayerIdx + 1}`;
-        setGameMessage(`${playerName} played Draw Two! ${targetName} draw${nextPlayerIdx === humanPlayer ? '' : 's'} 2 cards`);
+        const targetName = types[nextPlayerIdx]?.name || 'Player';
+        setGameMessage(`${playerName} played Draw Two! ${targetName} draw${types[nextPlayerIdx]?.isLocalHuman ? '' : 's'} 2 cards`);
         nextTurn(true);
         break;
       
@@ -170,8 +232,8 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
       case CARD_TYPES.WILD_DRAW_FOUR:
         const nextPlayerIdx2 = (currentPlayer + gameDirection + numberOfPlayers) % numberOfPlayers;
         drawCard(nextPlayerIdx2, 4);
-        const targetName2 = nextPlayerIdx2 === humanPlayer ? 'You' : `AI Player ${nextPlayerIdx2 + 1}`;
-        setGameMessage(`${playerName} played Wild Draw Four! ${targetName2} draw${nextPlayerIdx2 === humanPlayer ? '' : 's'} 4 cards. Color: ${newColor}`);
+        const targetName2 = types[nextPlayerIdx2]?.name || 'Player';
+        setGameMessage(`${playerName} played Wild Draw Four! ${targetName2} draw${types[nextPlayerIdx2]?.isLocalHuman ? '' : 's'} 4 cards. Color: ${newColor}`);
         nextTurn(true);
         break;
       
@@ -179,7 +241,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
         setGameMessage(`${playerName} played ${card.value || card.type}`);
         nextTurn();
     }
-  }, [players, currentPlayer, discardPile, humanPlayer, unoCalled, gameDirection, numberOfPlayers, drawCard, nextTurn]);
+  }, [players, currentPlayer, discardPile, humanPlayer, unoCalled, gameDirection, numberOfPlayers, drawCard, nextTurn, playerTypes, isMultiplayer, lobby]);
 
   const handleUnoClick = useCallback((clickingPlayer) => {
     if (unoTargetPlayer === null) return;
@@ -187,7 +249,8 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     if (clickingPlayer === unoTargetPlayer) {
       // Target player clicked - they're safe!
       setUnoCalled({ ...unoCalled, [clickingPlayer]: true });
-      const playerName = clickingPlayer === humanPlayer ? 'You' : `AI Player ${clickingPlayer + 1}`;
+      const types = playerTypes();
+      const playerName = types[clickingPlayer]?.name || 'Player';
       setGameMessage(`${playerName} called UNO!`);
       setShowUnoButton(false);
       setUnoTargetPlayer(null);
@@ -195,21 +258,23 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
       // Another player clicked first - target draws 2 cards
       if (deck.length >= 2) {
         drawCard(unoTargetPlayer, 2);
-        const catcher = clickingPlayer === humanPlayer ? 'You' : `AI Player ${clickingPlayer + 1}`;
-        const caught = unoTargetPlayer === humanPlayer ? 'you' : `AI Player ${unoTargetPlayer + 1}`;
-        setGameMessage(`${catcher} caught ${caught}! ${caught === 'you' ? 'You draw' : 'They draw'} 2 cards!`);
+        const types = playerTypes();
+        const catcher = types[clickingPlayer]?.name || 'Player';
+        const caught = types[unoTargetPlayer]?.isLocalHuman ? 'you' : types[unoTargetPlayer]?.name || 'player';
+        setGameMessage(`${catcher} caught ${caught}! ${types[unoTargetPlayer]?.isLocalHuman ? 'You draw' : 'They draw'} 2 cards!`);
       }
       setShowUnoButton(false);
       setUnoTargetPlayer(null);
     }
-  }, [unoTargetPlayer, unoCalled, humanPlayer, deck.length, drawCard]);
+  }, [unoTargetPlayer, unoCalled, humanPlayer, deck.length, drawCard, playerTypes]);
 
   const checkForUnoSituation = useCallback(() => {
     // Check if any player has exactly 1 card and hasn't called UNO
     players.forEach((hand, index) => {
       if (hand.length === 1 && !unoCalled[index] && !showUnoButton) {
-        // AI players automatically call UNO after a short delay
-        if (index !== humanPlayer) {
+        const types = playerTypes();
+        // Only AI players automatically call UNO, not remote human players
+        if (types[index]?.isAI && !types[index]?.isLocalHuman) {
           const aiUnoDelay = 500 + Math.random() * 1000; // 0.5-1.5 seconds
           setTimeout(() => {
             handleUnoClick(index);
@@ -220,7 +285,7 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
         setUnoTargetPlayer(index);
       }
     });
-  }, [players, unoCalled, showUnoButton, humanPlayer, handleUnoClick]);
+  }, [players, unoCalled, showUnoButton, humanPlayer, handleUnoClick, playerTypes]);
 
   const handleAiTurn = useCallback(() => {
     const topCard = discardPile[discardPile.length - 1];
@@ -299,7 +364,11 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
 
   // AI turn handler
   useEffect(() => {
-    if (currentPlayer !== humanPlayer && !gameOver && !showColorPicker && !showUnoButton) {
+    const types = playerTypes();
+    const currentPlayerType = types[currentPlayer];
+    
+    // Only trigger AI if current player is actually AI (not remote human in multiplayer)
+    if (currentPlayerType?.isAI && !gameOver && !showColorPicker && !showUnoButton) {
       setIsAiTurn(true);
       const delay = getAiDelay();
       
@@ -311,7 +380,29 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
     } else {
       setIsAiTurn(false);
     }
-  }, [currentPlayer, humanPlayer, gameOver, showColorPicker, showUnoButton, handleAiTurn]);
+  }, [currentPlayer, humanPlayer, gameOver, showColorPicker, showUnoButton, handleAiTurn, playerTypes]);
+
+  // Multiplayer game action listener
+  useEffect(() => {
+    if (!isMultiplayer || !lobby) return;
+
+    const handleGameAction = ({ action, data, playerId }) => {
+      // Ignore actions from local player
+      if (playerId === socketService.getSocketId()) return;
+
+      console.log('Received game action:', action, data);
+
+      // Handle different action types
+      // Note: Actions are already executed by the player who made them
+      // This is just for logging or additional sync if needed
+    };
+
+    socketService.onGameAction(handleGameAction);
+
+    return () => {
+      socketService.offGameAction(handleGameAction);
+    };
+  }, [isMultiplayer, lobby]);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -405,11 +496,14 @@ const GameBoard = ({ numberOfPlayers = 4, humanPlayer = 0, onBackToMenu }) => {
         >
           <PlayerHand
             cards={hand}
-            onCardClick={currentPlayer === index && index === humanPlayer && !isAiTurn ? handleCardPlay : null}
-            playableCards={currentPlayer === index && index === humanPlayer ? getPlayableCards() : []}
+            onCardClick={currentPlayer === index && playerTypes()[index]?.isLocalHuman && !isAiTurn ? handleCardPlay : null}
+            playableCards={currentPlayer === index && playerTypes()[index]?.isLocalHuman ? getPlayableCards() : []}
             playerNumber={index + 1}
-            isAI={index !== humanPlayer}
-            isHuman={index === humanPlayer}
+            isAI={playerTypes()[index]?.isAI}
+            isHuman={playerTypes()[index]?.isLocalHuman || playerTypes()[index]?.isRemoteHuman}
+            playerName={playerTypes()[index]?.name}
+            isRemote={playerTypes()[index]?.isRemoteHuman}
+            isHidden={!playerTypes()[index]?.isLocalHuman}
           />
         </div>
       ))}

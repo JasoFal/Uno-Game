@@ -129,7 +129,7 @@ const HomeScreen = ({ onQuickPlay, onLobby }) => {
         textAlign: 'center'
       }}>
         Quick Play: Play against 3 AI opponents<br/>
-        Lobby: Coming soon!
+        Lobby: Play with friends online!
       </p>
     </div>
   );

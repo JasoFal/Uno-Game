@@ -1,7 +1,9 @@
 import React from 'react';
 
-const Card = ({ card, onClick, isPlayable, isSmall }) => {
+const Card = ({ card, onClick, isPlayable, isSmall, isHidden }) => {
   const getCardDisplay = () => {
+    if (isHidden) return 'UNO';
+    
     switch (card.type) {
       case 'number':
         return card.value;
@@ -23,7 +25,7 @@ const Card = ({ card, onClick, isPlayable, isSmall }) => {
   const cardStyle = {
     width: isSmall ? '60px' : '80px',
     height: isSmall ? '90px' : '120px',
-    backgroundColor: card.color === 'wild' ? '#333' : card.color,
+    backgroundColor: isHidden ? '#1a1a1a' : (card.color === 'wild' ? '#333' : card.color),
     border: '2px solid #000',
     borderRadius: '8px',
     display: 'flex',
@@ -32,8 +34,8 @@ const Card = ({ card, onClick, isPlayable, isSmall }) => {
     fontSize: isSmall ? '20px' : '28px',
     fontWeight: 'bold',
     color: '#fff',
-    cursor: isPlayable ? 'pointer' : 'not-allowed',
-    opacity: isPlayable ? 1 : 0.6,
+    cursor: isPlayable ? 'pointer' : 'default',
+    opacity: isHidden ? 0.8 : (isPlayable ? 1 : 0.6),
     transition: 'transform 0.2s',
     margin: '5px'
   };

@@ -31,21 +31,6 @@ const UnoButton = ({ onUnoClick, targetPlayer, numberOfPlayers }) => {
     marginTop: '30px'
   };
 
-  const unoButtonStyle = {
-    padding: '20px 40px',
-    fontSize: '32px',
-    fontWeight: 'bold',
-    backgroundColor: '#ff3333',
-    color: 'white',
-    border: 'none',
-    borderRadius: '15px',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    boxShadow: '0 5px 15px rgba(255, 51, 51, 0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: '2px'
-  };
-
   const playerButtonStyle = (index) => ({
     padding: '15px 30px',
     fontSize: '18px',
